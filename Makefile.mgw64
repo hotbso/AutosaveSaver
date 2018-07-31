@@ -1,0 +1,40 @@
+.SUFFIXES: .obj
+
+TARGET=win.xpl
+HEADERS=$(wildcard *.h)
+SOURCES=$(wildcard *.c)
+OBJECTS=$(SOURCES:.c=.o)
+SDK=../SDK
+PLUGDIR=/e/X-Plane-11/Resources/plugins/autosave_save
+
+CC=x86_64-w64-mingw32-gcc
+LD=x86_64-w64-mingw32-gcc
+
+CFLAGS+=-mdll -g0 -O2 -s -Wall -fdiagnostics-color -Wno-format-overflow -DWINDOWS -DWIN32 \
+	-I$(SDK)/CHeaders/XPLM -I$(SDK)/CHeaders/Widgets -DIBM=1 -DXPLM200
+
+LDFLAGS=-shared -static-libgcc -static -lpthread
+LIBS=-L$(SDK)/Libraries/Win -lXPLM_64 -lXPWidgets_64
+
+
+all: $(TARGET)
+
+.c.obj:
+	$(CC) $(CFLAGS) -c $<
+	
+$(TARGET): $(OBJECTS)
+	$(LD) -o $(TARGET) $(LDFLAGS) $(OBJECTS) $(LIBS)
+
+clean:
+	rm $(OBJECTS) $(TARGET)
+
+# install the just compiled target
+install: $(TARGET)
+	mkdir -p "$(PLUGDIR)/64"
+	cp -p $(TARGET) "$(PLUGDIR)/64"
+
+# create the whole plugin directory
+plugin: $(TARGET)
+	mkdir -p "$(PLUGDIR)/64"
+	cp -p $(TARGET) "$(PLUGDIR)/64"
+	cp -p *.cfg "$(PLUGDIR)"
