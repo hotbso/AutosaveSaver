@@ -191,6 +191,12 @@ static int widget_cb(XPWidgetMessage msg, XPWidgetID widget_id, intptr_t param1,
 	return 0;
 }
 
+#if 0
+static int str_compare(void *a, void *b) {
+	return 
+}
+#endif
+
 static void ass_clean(void)
 {
 	if (ass_disabled)
@@ -231,7 +237,7 @@ static void ass_clean(void)
 
 			const char *s = de->d_name + strlen(autosave_base) + 1; /* past the _ */
 			char *d = ts_list + (TS_LENGTH * n_ts_list);
-			memcpy(d, s, TS_LENGTH);
+			memcpy(d, s, TS_LENGTH-1);
 			d[TS_LENGTH-1] = '\0';
 			log_msg("File: '%s', TS: %s", de->d_name, d);
 
@@ -249,6 +255,12 @@ static void ass_clean(void)
 		}
 
 		closedir(dir);
+		
+		qsort(ts_list, n_ts_list, TS_LENGTH, (int (*)(const void *, const void *))strcmp);
+		int i;
+		for (i = 0; i < n_ts_list; i++) {
+			log_msg("Sorted: %s", ts_list + i * TS_LENGTH);
+		}
 	}
 }
 
