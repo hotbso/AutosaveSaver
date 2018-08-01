@@ -1,9 +1,35 @@
+/*
+
+MIT License
+
+Copyright (c) 2018 
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <time.h>
 #include <stdarg.h>
+#include <dirent.h>
 #include <sys/stat.h>
 
 #include "XPLMPlugin.h"
@@ -28,16 +54,44 @@
 static float game_loop_cb(float elapsed_last_call,
                 float elapsed_last_loop, int counter,
                 void *in_refcon);
+static void ass_clean(void);
 
 static char xpdir[512];
 static const char *psep;
+static XPLMMenuID ass_menu;
 
 static char autosave_file[512];
 static char autosave_base[100];
 static char autosave_ext[20];
 
+#define TS_MAX 50
+#define TS_LENGTH 12 /* YYMMDD_HHMM\0 */
 
-static XPLMMenuID ass_menu;
+static int ass_disabled;
+static int ass_keep = 5;	/* default */
+static unsigned int n_ts_list, max_ts_list;
+static char *ts_list;
+
+#ifdef IBM
+/* 8-(
+   only support ? wildchar
+  */
+static int
+fnmatch(const char *pat, const char *str, int flags) {
+	while (1) {
+		char s = *str++;
+		char p = *pat++;
+	
+		if (s == '\0' || p == '\0')
+			return !(s == p);
+
+		if ((p != '?') && (p != s))
+			return 1;
+	}
+}
+#else
+#include <fnmatch.h>
+#endif
 
 static void
 log_msg(const char *fmt, ...)
@@ -121,6 +175,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID in_from,
 					strcpy(autosave_base, "autosave");
 					strcpy(autosave_ext, ".asb");
 					log_msg(autosave_file);
+					ass_clean();
 				} else {
 					autosave_file[0] = '\0';
 				}
@@ -136,6 +191,67 @@ static int widget_cb(XPWidgetMessage msg, XPWidgetID widget_id, intptr_t param1,
 	return 0;
 }
 
+static void ass_clean(void)
+{
+	if (ass_disabled)
+		return;
+
+	if (NULL == ts_list) {
+		n_ts_list = 0;
+		max_ts_list = ass_keep * 3 / 2 + 1;
+		ts_list = malloc(max_ts_list * TS_LENGTH);
+		if (NULL == ts_list) {
+			log_msg("No memory for %d entries?", max_ts_list);
+			ass_disabled = 1;
+			return;
+		}
+		
+		char ass_mask[512];
+		
+		strcpy(ass_mask, autosave_file);
+		char *s = strrchr(ass_mask, psep[0]);
+		*s = '\0';
+
+		DIR *dir = opendir(ass_mask);
+		if (NULL == dir) {
+			log_msg("Can't scan directory \"%s\": %s", ass_mask, strerror(errno));
+			ass_disabled = 1;
+			return;
+		}
+		
+		strcpy(ass_mask, autosave_base);
+		strcat(ass_mask, "_??????_????");
+		strcat(ass_mask, autosave_ext);
+		log_msg("mask: '%s'", ass_mask);
+
+		const struct dirent *de;
+		while (NULL != (de = readdir(dir)))	{
+			if (0 != fnmatch(ass_mask, de->d_name, 0))
+				continue;
+
+			const char *s = de->d_name + strlen(autosave_base) + 1; /* past the _ */
+			char *d = ts_list + (TS_LENGTH * n_ts_list);
+			memcpy(d, s, TS_LENGTH);
+			d[TS_LENGTH-1] = '\0';
+			log_msg("File: '%s', TS: %s", de->d_name, d);
+
+			n_ts_list++;
+			if (n_ts_list == max_ts_list) {
+				max_ts_list = n_ts_list * 3 / 2 + 1;
+				ts_list = realloc(ts_list, max_ts_list * TS_LENGTH);
+				if (NULL == ts_list) {
+					log_msg("No memory for %d entries?", max_ts_list);
+					ass_disabled = 1;
+					return;
+				}
+				log_msg("realloc %d\n", max_ts_list);
+			}
+		}
+
+		closedir(dir);
+	}
+}
+
 static float game_loop_cb(float elapsed_last_call,
                 float elapsed_last_loop, int counter,
                 void *in_refcon)
@@ -144,7 +260,7 @@ static float game_loop_cb(float elapsed_last_call,
 	struct stat stat_buf;
 	time_t now = time(NULL);
 
-	if ('\0' == autosave_file[0])
+	if (ass_disabled || ('\0' == autosave_file[0]))
 		goto done;
 
 	if (0 != stat(autosave_file, &stat_buf))
