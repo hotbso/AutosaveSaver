@@ -54,6 +54,8 @@ SOFTWARE.
 static float game_loop_cb(float elapsed_last_call,
                 float elapsed_last_loop, int counter,
                 void *in_refcon);
+				
+static void delete_tail(void);
 static void ass_clean(void);
 
 static char xpdir[512];
@@ -71,6 +73,8 @@ static int ass_disabled;
 static int ass_keep = 5;	/* default */
 static unsigned int n_ts_list, max_ts_list;
 static char *ts_list;
+static unsigned ts_head;	/* newest TS */
+static unsigned ts_tail;	/* oldest TS */
 
 #ifdef IBM
 /* 8-(
@@ -197,6 +201,16 @@ static int str_compare(void *a, void *b) {
 }
 #endif
 
+static void delete_tail(void) {
+	char fname[512];
+	strcpy(fname, autosave_file);
+	char *s = strrchr(fname, psep[0]);
+	sprintf(s+1, "%s_%s%s", autosave_base, ts_list + ts_tail * TS_LENGTH, autosave_ext);
+	log_msg("Delete: '%s'", fname);
+	n_ts_list--;
+	ts_tail = (ts_tail + 1) % max_ts_list;
+}
+
 static void ass_clean(void)
 {
 	if (ass_disabled)
@@ -242,7 +256,7 @@ static void ass_clean(void)
 			log_msg("File: '%s', TS: %s", de->d_name, d);
 
 			n_ts_list++;
-			if (n_ts_list == max_ts_list) {
+			if (n_ts_list == max_ts_list - 1) {
 				max_ts_list = n_ts_list * 3 / 2 + 1;
 				ts_list = realloc(ts_list, max_ts_list * TS_LENGTH);
 				if (NULL == ts_list) {
@@ -257,9 +271,12 @@ static void ass_clean(void)
 		closedir(dir);
 		
 		qsort(ts_list, n_ts_list, TS_LENGTH, (int (*)(const void *, const void *))strcmp);
-		int i;
-		for (i = 0; i < n_ts_list; i++) {
-			log_msg("Sorted: %s", ts_list + i * TS_LENGTH);
+		
+		ts_head = n_ts_list - 1;
+		ts_tail = 0;
+		
+		while (n_ts_list > ass_keep) {
+			delete_tail();
 		}
 	}
 }
