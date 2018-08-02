@@ -56,7 +56,7 @@ static float game_loop_cb(float elapsed_last_call,
                 void *in_refcon);
 				
 static void delete_tail(void);
-static void ass_clean(void);
+static void init_ts_list(void);
 
 static char xpdir[512];
 static const char *psep;
@@ -71,10 +71,10 @@ static char autosave_ext[20];
 
 static int ass_disabled;
 static int ass_keep = 5;	/* default */
-static unsigned int n_ts_list, max_ts_list;
+static int n_ts_list, max_ts_list;
 static char *ts_list;
-static unsigned ts_head;	/* newest TS */
-static unsigned ts_tail;	/* oldest TS */
+static int ts_head;	/* newest TS */
+static int ts_tail;	/* oldest TS */
 
 #ifdef IBM
 /* 8-(
@@ -106,16 +106,18 @@ log_msg(const char *fmt, ...)
 	va_start(ap, fmt);
 	vsnprintf(line, sizeof(line) - 3, fmt, ap);
 	strcat(line, "\n");
-	XPLMDebugString("autosave_save: ");
+	XPLMDebugString("ass: ");
 	XPLMDebugString(line);
 	va_end(ap);
 }
 
-static void menu_cb(void *menuRef, void *param)
+static void
+menu_cb(void *menuRef, void *param)
 {
 }
 
-PLUGIN_API int XPluginStart(char *out_name, char *out_sig, char *out_desc)
+PLUGIN_API int
+XPluginStart(char *out_name, char *out_sig, char *out_desc)
 {
     XPLMMenuID menu;
     int sub_menu;
@@ -141,24 +143,27 @@ PLUGIN_API int XPluginStart(char *out_name, char *out_sig, char *out_desc)
 
 
 
-PLUGIN_API void	XPluginStop(void)
+PLUGIN_API void
+XPluginStop(void)
 {
 }
 
 
-PLUGIN_API void XPluginDisable(void)
+PLUGIN_API void
+XPluginDisable(void)
 {
 }
 
 
-PLUGIN_API int XPluginEnable(void)
+PLUGIN_API int
+XPluginEnable(void)
 {
 	return 1;
 }
 
 
-PLUGIN_API void XPluginReceiveMessage(XPLMPluginID in_from,
-                long in_msg, void *in_param)
+PLUGIN_API void
+XPluginReceiveMessage(XPLMPluginID in_from, long in_msg, void *in_param)
 {
 	UNUSED(in_from);
 
@@ -179,7 +184,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID in_from,
 					strcpy(autosave_base, "autosave");
 					strcpy(autosave_ext, ".asb");
 					log_msg(autosave_file);
-					ass_clean();
+					init_ts_list();
 				} else {
 					autosave_file[0] = '\0';
 				}
@@ -189,19 +194,16 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID in_from,
 }
 
 
-
-static int widget_cb(XPWidgetMessage msg, XPWidgetID widget_id, intptr_t param1, intptr_t param2)
+#if 0
+static int
+widget_cb(XPWidgetMessage msg, XPWidgetID widget_id, intptr_t param1, intptr_t param2)
 {
 	return 0;
 }
-
-#if 0
-static int str_compare(void *a, void *b) {
-	return 
-}
 #endif
 
-static void delete_tail(void) {
+static void
+delete_tail(void) {
 	char fname[512];
 	strcpy(fname, autosave_file);
 	char *s = strrchr(fname, psep[0]);
@@ -211,20 +213,40 @@ static void delete_tail(void) {
 	ts_tail = (ts_tail + 1) % max_ts_list;
 }
 
-static void ass_clean(void)
+static int
+alloc_ts_list(void) {
+	if (n_ts_list < max_ts_list - 1)
+		return 1;
+
+	max_ts_list = (ass_keep > max_ts_list ? ass_keep : max_ts_list) + 15;
+	log_msg("try realloc to %d", max_ts_list);
+
+	if (NULL == ts_list) {
+		ts_list = malloc(max_ts_list * TS_LENGTH);
+	} else {
+		ts_list = realloc(ts_list, max_ts_list * TS_LENGTH);
+	}
+	
+	if (NULL == ts_list) {
+		log_msg("No memory for %d entries?", max_ts_list);
+		ass_disabled = 1;
+		return 0;
+	}
+	
+	log_msg("realloc to %d", max_ts_list);
+	return 1;
+}
+
+static void
+init_ts_list(void)
 {
 	if (ass_disabled)
 		return;
 
 	if (NULL == ts_list) {
 		n_ts_list = 0;
-		max_ts_list = ass_keep * 3 / 2 + 1;
-		ts_list = malloc(max_ts_list * TS_LENGTH);
-		if (NULL == ts_list) {
-			log_msg("No memory for %d entries?", max_ts_list);
-			ass_disabled = 1;
+		if (! alloc_ts_list())
 			return;
-		}
 		
 		char ass_mask[512];
 		
@@ -249,23 +271,15 @@ static void ass_clean(void)
 			if (0 != fnmatch(ass_mask, de->d_name, 0))
 				continue;
 
+			if (!alloc_ts_list())
+				return;
+
 			const char *s = de->d_name + strlen(autosave_base) + 1; /* past the _ */
 			char *d = ts_list + (TS_LENGTH * n_ts_list);
 			memcpy(d, s, TS_LENGTH-1);
 			d[TS_LENGTH-1] = '\0';
-			log_msg("File: '%s', TS: %s", de->d_name, d);
-
+			log_msg("File: '%s', TS: %s", de->d_name, d);		
 			n_ts_list++;
-			if (n_ts_list == max_ts_list - 1) {
-				max_ts_list = n_ts_list * 3 / 2 + 1;
-				ts_list = realloc(ts_list, max_ts_list * TS_LENGTH);
-				if (NULL == ts_list) {
-					log_msg("No memory for %d entries?", max_ts_list);
-					ass_disabled = 1;
-					return;
-				}
-				log_msg("realloc %d\n", max_ts_list);
-			}
 		}
 
 		closedir(dir);
@@ -281,9 +295,9 @@ static void ass_clean(void)
 	}
 }
 
-static float game_loop_cb(float elapsed_last_call,
-                float elapsed_last_loop, int counter,
-                void *in_refcon)
+static float
+game_loop_cb(float elapsed_last_call,
+             float elapsed_last_loop, int counter, void *in_refcon)
 {
 	float loop_delay = 30.0f;
 	struct stat stat_buf;
@@ -300,16 +314,25 @@ static float game_loop_cb(float elapsed_last_call,
 
 	if (now - stat_buf.st_mtime > 30) {
 		char new_name[1024];
+		char ts[TS_LENGTH];
+		
 		struct tm *tm = localtime(&now);
 
 		strcpy(new_name, autosave_file);
 		char *s = strrchr(new_name, psep[0]);
-		sprintf(s+1, "%s_%02d%02d%02d_%02d%02d%s", autosave_base,
-				tm->tm_year-100, tm->tm_mon+1, tm->tm_mday, tm->tm_hour, tm->tm_min,
-				autosave_ext);
+		snprintf(ts, TS_LENGTH, "%02d%02d%02d_%02d%02d", tm->tm_year-100, tm->tm_mon+1,
+				 tm->tm_mday, tm->tm_hour, tm->tm_min);
+		sprintf(s+1, "%s_%s%s", autosave_base, ts, autosave_ext);
 		log_msg(autosave_file);
 		log_msg(new_name);
 		rename(autosave_file, new_name);
+		if (!alloc_ts_list())
+			return loop_delay;
+		
+		char *d = ts_list + (TS_LENGTH * ts_head);
+		memcpy(d, ts, TS_LENGTH);
+		n_ts_list++;
+		ts_head = (ts_head + 1) % max_ts_list;
 	}
 
    done:
