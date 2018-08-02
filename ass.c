@@ -69,7 +69,9 @@ static char autosave_ext[20];
 #define TS_MAX 50
 #define TS_LENGTH 12 /* YYMMDD_HHMM\0 */
 
-static int ass_disabled;
+/* this is a nonessential plugin so if anything goes wrong
+   we just disable and protect the sim */
+static int ass_error_disabled;
 static int ass_keep = 5;	/* default */
 static int n_ts_list, max_ts_list;
 static char *ts_list;
@@ -207,10 +209,19 @@ delete_tail(void) {
 	char fname[512];
 	strcpy(fname, autosave_file);
 	char *s = strrchr(fname, psep[0]);
-	sprintf(s+1, "%s_%s%s", autosave_base, ts_list + ts_tail * TS_LENGTH, autosave_ext);
-	log_msg("Delete: '%s'", fname);
-	n_ts_list--;
-	ts_tail = (ts_tail + 1) % max_ts_list;
+	
+	while (n_ts_list > ass_keep) {
+		sprintf(s+1, "%s_%s%s", autosave_base, ts_list + ts_tail * TS_LENGTH, autosave_ext);
+		if (unlink(fname) < 0) {
+			log_msg("Can't unlink '%s': %s", fname, strerror(errno));
+			ass_error_disabled = 1;
+			return;
+		}
+		
+		log_msg("Deleted: '%s'", fname);
+		n_ts_list--;
+		ts_tail = (ts_tail + 1) % max_ts_list;
+	}
 }
 
 static int
@@ -219,17 +230,11 @@ alloc_ts_list(void) {
 		return 1;
 
 	max_ts_list = (ass_keep > max_ts_list ? ass_keep : max_ts_list) + 15;
-	log_msg("try realloc to %d", max_ts_list);
+	ts_list = realloc(ts_list, max_ts_list * TS_LENGTH);
 
 	if (NULL == ts_list) {
-		ts_list = malloc(max_ts_list * TS_LENGTH);
-	} else {
-		ts_list = realloc(ts_list, max_ts_list * TS_LENGTH);
-	}
-	
-	if (NULL == ts_list) {
 		log_msg("No memory for %d entries?", max_ts_list);
-		ass_disabled = 1;
+		ass_error_disabled = 1;
 		return 0;
 	}
 	
@@ -240,59 +245,55 @@ alloc_ts_list(void) {
 static void
 init_ts_list(void)
 {
-	if (ass_disabled)
+	if (ass_error_disabled)
 		return;
 
-	if (NULL == ts_list) {
-		n_ts_list = 0;
-		if (! alloc_ts_list())
-			return;
-		
-		char ass_mask[512];
-		
-		strcpy(ass_mask, autosave_file);
-		char *s = strrchr(ass_mask, psep[0]);
-		*s = '\0';
+	n_ts_list = 0;
+	if (! alloc_ts_list())
+		return;
+	
+	char ass_mask[512];
+	
+	strcpy(ass_mask, autosave_file);
+	char *s = strrchr(ass_mask, psep[0]);
+	*s = '\0';
 
-		DIR *dir = opendir(ass_mask);
-		if (NULL == dir) {
-			log_msg("Can't scan directory \"%s\": %s", ass_mask, strerror(errno));
-			ass_disabled = 1;
-			return;
-		}
-		
-		strcpy(ass_mask, autosave_base);
-		strcat(ass_mask, "_??????_????");
-		strcat(ass_mask, autosave_ext);
-		log_msg("mask: '%s'", ass_mask);
-
-		const struct dirent *de;
-		while (NULL != (de = readdir(dir)))	{
-			if (0 != fnmatch(ass_mask, de->d_name, 0))
-				continue;
-
-			if (!alloc_ts_list())
-				return;
-
-			const char *s = de->d_name + strlen(autosave_base) + 1; /* past the _ */
-			char *d = ts_list + (TS_LENGTH * n_ts_list);
-			memcpy(d, s, TS_LENGTH-1);
-			d[TS_LENGTH-1] = '\0';
-			log_msg("File: '%s', TS: %s", de->d_name, d);		
-			n_ts_list++;
-		}
-
-		closedir(dir);
-		
-		qsort(ts_list, n_ts_list, TS_LENGTH, (int (*)(const void *, const void *))strcmp);
-		
-		ts_head = n_ts_list - 1;
-		ts_tail = 0;
-		
-		while (n_ts_list > ass_keep) {
-			delete_tail();
-		}
+	DIR *dir = opendir(ass_mask);
+	if (NULL == dir) {
+		log_msg("Can't scan directory \"%s\": %s", ass_mask, strerror(errno));
+		ass_error_disabled = 1;
+		return;
 	}
+	
+	strcpy(ass_mask, autosave_base);
+	strcat(ass_mask, "_??????_????");
+	strcat(ass_mask, autosave_ext);
+	log_msg("mask: '%s'", ass_mask);
+
+	const struct dirent *de;
+	while (NULL != (de = readdir(dir)))	{
+		if (0 != fnmatch(ass_mask, de->d_name, 0))
+			continue;
+
+		if (!alloc_ts_list())
+			return;
+
+		const char *s = de->d_name + strlen(autosave_base) + 1; /* past the _ */
+		char *d = ts_list + (TS_LENGTH * n_ts_list);
+		memcpy(d, s, TS_LENGTH-1);
+		d[TS_LENGTH-1] = '\0';
+		log_msg("File: '%s', TS: %s", de->d_name, d);		
+		n_ts_list++;
+	}
+
+	closedir(dir);
+	
+	qsort(ts_list, n_ts_list, TS_LENGTH, (int (*)(const void *, const void *))strcmp);
+	
+	ts_head = n_ts_list - 1;
+	ts_tail = 0;
+	
+	delete_tail();
 }
 
 static float
@@ -303,7 +304,7 @@ game_loop_cb(float elapsed_last_call,
 	struct stat stat_buf;
 	time_t now = time(NULL);
 
-	if (ass_disabled || ('\0' == autosave_file[0]))
+	if (ass_error_disabled || ('\0' == autosave_file[0]))
 		goto done;
 
 	if (0 != stat(autosave_file, &stat_buf))
@@ -323,19 +324,25 @@ game_loop_cb(float elapsed_last_call,
 		snprintf(ts, TS_LENGTH, "%02d%02d%02d_%02d%02d", tm->tm_year-100, tm->tm_mon+1,
 				 tm->tm_mday, tm->tm_hour, tm->tm_min);
 		sprintf(s+1, "%s_%s%s", autosave_base, ts, autosave_ext);
-		log_msg(autosave_file);
-		log_msg(new_name);
-		rename(autosave_file, new_name);
+		if (rename(autosave_file, new_name) < 0) {
+			log_msg("Cannot rename autosave file to '%s': %s", new_name, strerror(errno));
+			ass_error_disabled = 1;
+			goto done;
+		}
+		
+		log_msg("Renamed autosave file to '%s'", new_name);
+
 		if (!alloc_ts_list())
-			return loop_delay;
+			goto done;
 		
 		char *d = ts_list + (TS_LENGTH * ts_head);
 		memcpy(d, ts, TS_LENGTH);
 		n_ts_list++;
 		ts_head = (ts_head + 1) % max_ts_list;
+
+		delete_tail();
 	}
 
    done:
     return loop_delay;
 }
-
