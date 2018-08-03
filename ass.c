@@ -2,7 +2,7 @@
 
 MIT License
 
-Copyright (c) 2018 
+Copyright (c) 2018
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -49,12 +49,12 @@ SOFTWARE.
 
 #define UNUSED(x) (void)(x)
 
-#define VERSION "0.1a"
+#define VERSION "0.7a"
 
 static float game_loop_cb(float elapsed_last_call,
                 float elapsed_last_loop, int counter,
                 void *in_refcon);
-				
+
 static void delete_tail(void);
 static void init_ts_list(void);
 
@@ -63,8 +63,10 @@ static const char *psep;
 static XPLMMenuID ass_menu;
 
 static char autosave_file[512];
-static char autosave_base[100];
-static char autosave_ext[20];
+static char autosave_base[20];
+static char autosave_ext[10];
+static char cfg_path[512];
+
 
 #define TS_MAX 50
 #define TS_LENGTH 12 /* YYMMDD_HHMM\0 */
@@ -72,6 +74,7 @@ static char autosave_ext[20];
 /* this is a nonessential plugin so if anything goes wrong
    we just disable and protect the sim */
 static int ass_error_disabled;
+static int ass_enabled = 1;
 static int ass_keep = 5;	/* default */
 static int n_ts_list, max_ts_list;
 static char *ts_list;
@@ -87,7 +90,7 @@ fnmatch(const char *pat, const char *str, int flags) {
 	while (1) {
 		char s = *str++;
 		char p = *pat++;
-	
+
 		if (s == '\0' || p == '\0')
 			return !(s == p);
 
@@ -114,6 +117,30 @@ log_msg(const char *fmt, ...)
 }
 
 static void
+save_pref()
+{
+    FILE *f = fopen(cfg_path, "w");
+    if (NULL == f)
+        return;
+
+    fprintf(f, "%d %d", ass_enabled, ass_keep);
+    fclose(f);
+}
+
+
+static void
+load_pref()
+{
+    FILE *f  = fopen(cfg_path, "r");
+    if (NULL == f)
+        return;
+
+    fscanf(f, "%i %i", &ass_enabled, &ass_keep);
+    fclose(f);
+	log_msg("From pref: ass_enabled: %d, ass_keep: %d", ass_enabled, ass_keep);
+}
+
+static void
 menu_cb(void *menuRef, void *param)
 {
 }
@@ -130,10 +157,15 @@ XPluginStart(char *out_name, char *out_sig, char *out_desc)
     psep = XPLMGetDirectorySeparator();
 	XPLMGetSystemPath(xpdir);
 
-    strcpy(out_name, "autosave_save" VERSION);
+    strcpy(out_name, "autosave saver (ass) " VERSION);
     strcpy(out_sig, "hotbso");
-    strcpy(out_desc, "A plugin that save autosave state/situation files.");
+    strcpy(out_desc, "A plugin that save autosave state/situation files with a timestamp.");
 
+    XPLMGetPrefsPath(cfg_path);
+    XPLMExtractFileAndPath(cfg_path);
+    strcat(cfg_path, psep);
+    strcat(cfg_path, "ass.prf");
+	load_pref();
 
     XPLMRegisterFlightLoopCallback(game_loop_cb, 30.0f, NULL);
 
@@ -148,6 +180,7 @@ XPluginStart(char *out_name, char *out_sig, char *out_desc)
 PLUGIN_API void
 XPluginStop(void)
 {
+	save_pref();
 }
 
 
@@ -209,7 +242,7 @@ delete_tail(void) {
 	char fname[512];
 	strcpy(fname, autosave_file);
 	char *s = strrchr(fname, psep[0]);
-	
+
 	while (n_ts_list > ass_keep) {
 		sprintf(s+1, "%s_%s%s", autosave_base, ts_list + ts_tail * TS_LENGTH, autosave_ext);
 		if (unlink(fname) < 0) {
@@ -217,7 +250,7 @@ delete_tail(void) {
 			ass_error_disabled = 1;
 			return;
 		}
-		
+
 		log_msg("Deleted: '%s'", fname);
 		n_ts_list--;
 		ts_tail = (ts_tail + 1) % max_ts_list;
@@ -237,7 +270,7 @@ alloc_ts_list(void) {
 		ass_error_disabled = 1;
 		return 0;
 	}
-	
+
 	log_msg("realloc to %d", max_ts_list);
 	return 1;
 }
@@ -251,9 +284,9 @@ init_ts_list(void)
 	n_ts_list = 0;
 	if (! alloc_ts_list())
 		return;
-	
+
 	char ass_mask[512];
-	
+
 	strcpy(ass_mask, autosave_file);
 	char *s = strrchr(ass_mask, psep[0]);
 	*s = '\0';
@@ -264,7 +297,7 @@ init_ts_list(void)
 		ass_error_disabled = 1;
 		return;
 	}
-	
+
 	strcpy(ass_mask, autosave_base);
 	strcat(ass_mask, "_??????_????");
 	strcat(ass_mask, autosave_ext);
@@ -282,17 +315,17 @@ init_ts_list(void)
 		char *d = ts_list + (TS_LENGTH * n_ts_list);
 		memcpy(d, s, TS_LENGTH-1);
 		d[TS_LENGTH-1] = '\0';
-		log_msg("File: '%s', TS: %s", de->d_name, d);		
+		log_msg("File: '%s', TS: %s", de->d_name, d);
 		n_ts_list++;
 	}
 
 	closedir(dir);
-	
+
 	qsort(ts_list, n_ts_list, TS_LENGTH, (int (*)(const void *, const void *))strcmp);
-	
+
 	ts_head = n_ts_list - 1;
 	ts_tail = 0;
-	
+
 	delete_tail();
 }
 
@@ -316,7 +349,7 @@ game_loop_cb(float elapsed_last_call,
 	if (now - stat_buf.st_mtime > 30) {
 		char new_name[1024];
 		char ts[TS_LENGTH];
-		
+
 		struct tm *tm = localtime(&now);
 
 		strcpy(new_name, autosave_file);
@@ -329,12 +362,12 @@ game_loop_cb(float elapsed_last_call,
 			ass_error_disabled = 1;
 			goto done;
 		}
-		
+
 		log_msg("Renamed autosave file to '%s'", new_name);
 
 		if (!alloc_ts_list())
 			goto done;
-		
+
 		char *d = ts_list + (TS_LENGTH * ts_head);
 		memcpy(d, ts, TS_LENGTH);
 		n_ts_list++;
