@@ -61,6 +61,8 @@ static void init_ts_list(void);
 static char xpdir[512];
 static const char *psep;
 static XPLMMenuID ass_menu;
+static int ass_enable_item;
+static XPWidgetID conf_widget;
 
 static char autosave_file[512];
 static char autosave_base[20];
@@ -140,9 +142,32 @@ load_pref()
 	log_msg("From pref: ass_enabled: %d, ass_keep: %d", ass_enabled, ass_keep);
 }
 
-static void
-menu_cb(void *menuRef, void *param)
+
+static int
+widget_cb(XPWidgetMessage msg, XPWidgetID widget_id, intptr_t param1, intptr_t param2)
 {
+	return 0;
+}
+
+
+static void
+menu_cb(void *menu_ref, void *item_ref)
+{
+	if ((int *)item_ref == &ass_enabled) {
+		ass_enabled = !ass_enabled;
+		XPLMCheckMenuItem(ass_menu, ass_enable_item,
+						  ass_enabled ? xplm_Menu_Checked : xplm_Menu_Unchecked);
+	} else if ((int *)item_ref == &ass_keep) {
+		if (NULL == conf_widget) {
+			conf_widget = XPCreateWidget(200, 400, 400, 200,
+				0, "Autosave Saver", 1, NULL, xpWidgetClass_MainWindow);
+			/* XPSetWidgetProperty(conf_widget, xpProperty_MainWindowType, xpMainWindowStyle_Translucent); */
+			XPSetWidgetProperty(conf_widget, xpProperty_MainWindowHasCloseBoxes, 1);
+			XPAddWidgetCallback(conf_widget, widget_cb);	
+		}
+		
+		XPShowWidget(conf_widget);
+	}
 }
 
 PLUGIN_API int
@@ -172,6 +197,10 @@ XPluginStart(char *out_name, char *out_sig, char *out_desc)
     menu = XPLMFindPluginsMenu();
     sub_menu = XPLMAppendMenuItem(menu, "Autosave Save", NULL, 1);
     ass_menu = XPLMCreateMenu("Autosave Save", menu, sub_menu, menu_cb, NULL);
+	ass_enable_item = XPLMAppendMenuItem(ass_menu, "Enabled", &ass_enabled, 0);
+	XPLMCheckMenuItem(ass_menu, ass_enable_item,
+					  ass_enabled ? xplm_Menu_Checked : xplm_Menu_Unchecked);
+	XPLMAppendMenuItem(ass_menu, "Configure", &ass_keep, 0);
     return 1;
 }
 
@@ -228,14 +257,6 @@ XPluginReceiveMessage(XPLMPluginID in_from, long in_msg, void *in_param)
 	}
 }
 
-
-#if 0
-static int
-widget_cb(XPWidgetMessage msg, XPWidgetID widget_id, intptr_t param1, intptr_t param2)
-{
-	return 0;
-}
-#endif
 
 static void
 delete_tail(void) {
