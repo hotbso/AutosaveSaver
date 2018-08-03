@@ -151,8 +151,9 @@ static int
 widget_cb(XPWidgetMessage msg, XPWidgetID widget_id, intptr_t param1, intptr_t param2)
 {
 	if ((widget_id == pref_widget) && (msg == xpMessage_CloseButtonPushed)) {
-			XPHideWidget(pref_widget);
-			return 1;
+		XPHideWidget(pref_widget);
+		return 1;
+
 	} else if ((widget_id == pref_btn) && (msg == xpMsg_PushButtonPressed)) {
 		int valid;
 		int k = XPGetWidgetProperty(pref_slider, xpProperty_ScrollBarSliderPosition, &valid);
@@ -161,7 +162,9 @@ widget_cb(XPWidgetMessage msg, XPWidgetID widget_id, intptr_t param1, intptr_t p
 
 		XPHideWidget(pref_widget);
 		log_msg("ass_keep set to %d", ass_keep);
+		delete_tail();
 		return 1;
+
 	} else if ((msg == xpMsg_ScrollBarSliderPositionChanged) && ((XPWidgetID)param1 == pref_slider)) {
 		int k = XPGetWidgetProperty(pref_slider, xpProperty_ScrollBarSliderPosition, NULL);
 
@@ -185,7 +188,7 @@ menu_cb(void *menu_ref, void *item_ref)
 	} else if ((int *)item_ref == &ass_keep) {
 		if (NULL == pref_widget) {
 			int left = 200;
-			int top = 200;
+			int top = 600;
 			int width = 200;
 			int height = 100;
 
@@ -287,6 +290,9 @@ XPluginReceiveMessage(XPLMPluginID in_from, long in_msg, void *in_param)
 				char acf_path[512];
 				char acf_file[256];
 
+				/* assume not detected */
+				autosave_file[0] = '\0';
+
 				XPLMGetNthAircraftModel(XPLM_USER_AIRCRAFT, acf_file, acf_path);
 				log_msg(acf_file);
 				log_msg(acf_path);
@@ -294,13 +300,20 @@ XPluginReceiveMessage(XPLMPluginID in_from, long in_msg, void *in_param)
 				if (0 == strcmp(acf_file, "A320.acf")) {
 					strcpy(autosave_file, acf_path);
 					char *s = strrchr(autosave_file, psep[0]);
-					sprintf(s+1, "data%sstate%sautosave.asb", psep, psep);
+
+					/* check for directory */
+					sprintf(s+1, "data%sstate", psep);
+					if (0 != access(autosave_file, F_OK))
+						return;
+					
+					log_msg("Detected FFA320U");
+					
+					strcat(s, psep);
+					strcat(s, "sautosave.asb");
 					strcpy(autosave_base, "autosave");
 					strcpy(autosave_ext, ".asb");
 					log_msg(autosave_file);
 					init_ts_list();
-				} else {
-					autosave_file[0] = '\0';
 				}
 			}
 		break;
@@ -311,6 +324,10 @@ XPluginReceiveMessage(XPLMPluginID in_from, long in_msg, void *in_param)
 static void
 delete_tail(void) {
 	char fname[512];
+	
+	if (!ass_enabled)
+		return;
+
 	strcpy(fname, autosave_file);
 	char *s = strrchr(fname, psep[0]);
 
