@@ -62,7 +62,7 @@ static char xpdir[512];
 static const char *psep;
 static XPLMMenuID ass_menu;
 static int ass_enable_item;
-static XPWidgetID conf_widget;
+static XPWidgetID pref_widget, pref_slider, pref_slider_v, pref_btn;
 
 static char autosave_file[512];
 static char autosave_base[20];
@@ -72,6 +72,8 @@ static char cfg_path[512];
 
 #define TS_MAX 50
 #define TS_LENGTH 12 /* YYMMDD_HHMM\0 */
+#define KEEP_MIN 2
+#define KEEP_MAX 20
 
 /* this is a nonessential plugin so if anything goes wrong
    we just disable and protect the sim */
@@ -140,12 +142,35 @@ load_pref()
     fscanf(f, "%i %i", &ass_enabled, &ass_keep);
     fclose(f);
 	log_msg("From pref: ass_enabled: %d, ass_keep: %d", ass_enabled, ass_keep);
+	ass_keep = ass_keep < KEEP_MIN ? KEEP_MIN : ass_keep;
+	ass_keep = ass_keep > KEEP_MAX ? KEEP_MAX : ass_keep;
 }
 
 
 static int
 widget_cb(XPWidgetMessage msg, XPWidgetID widget_id, intptr_t param1, intptr_t param2)
 {
+	if ((widget_id == pref_widget) && (msg == xpMessage_CloseButtonPushed)) {
+			XPHideWidget(pref_widget);
+			return 1;
+	} else if ((widget_id == pref_btn) && (msg == xpMsg_PushButtonPressed)) {
+		int valid;
+		int k = XPGetWidgetProperty(pref_slider, xpProperty_ScrollBarSliderPosition, &valid);
+		if (valid)
+			ass_keep = k;
+
+		XPHideWidget(pref_widget);
+		log_msg("ass_keep set to %d", ass_keep);
+		return 1;
+	} else if ((msg == xpMsg_ScrollBarSliderPositionChanged) && ((XPWidgetID)param1 == pref_slider)) {
+		int k = XPGetWidgetProperty(pref_slider, xpProperty_ScrollBarSliderPosition, NULL);
+
+		char buff[10];
+		snprintf(buff, sizeof(buff), "%d", k);
+		XPSetWidgetDescriptor(pref_slider_v, buff);
+		return 1;
+	}
+
 	return 0;
 }
 
@@ -158,15 +183,40 @@ menu_cb(void *menu_ref, void *item_ref)
 		XPLMCheckMenuItem(ass_menu, ass_enable_item,
 						  ass_enabled ? xplm_Menu_Checked : xplm_Menu_Unchecked);
 	} else if ((int *)item_ref == &ass_keep) {
-		if (NULL == conf_widget) {
-			conf_widget = XPCreateWidget(200, 400, 400, 200,
-				0, "Autosave Saver", 1, NULL, xpWidgetClass_MainWindow);
-			/* XPSetWidgetProperty(conf_widget, xpProperty_MainWindowType, xpMainWindowStyle_Translucent); */
-			XPSetWidgetProperty(conf_widget, xpProperty_MainWindowHasCloseBoxes, 1);
-			XPAddWidgetCallback(conf_widget, widget_cb);	
+		if (NULL == pref_widget) {
+			int left = 200;
+			int top = 200;
+			int width = 200;
+			int height = 100;
+
+			pref_widget = XPCreateWidget(left, top, left + width, top - height,
+										 0, "Autosave Saver", 1, NULL, xpWidgetClass_MainWindow);
+			XPSetWidgetProperty(pref_widget, xpProperty_MainWindowHasCloseBoxes, 1);
+			XPAddWidgetCallback(pref_widget, widget_cb);
+			left += 5; top -= 25;
+			XPCreateWidget(left, top, left + width - 2 * 5, top - 15,
+						   1, "Autosave copies to keep", 0, pref_widget, xpWidgetClass_Caption);
+			top -= 20;
+			pref_slider = XPCreateWidget(left, top, left + width - 30, top - 25,
+										 1, "ass_keep", 0, pref_widget, xpWidgetClass_ScrollBar);
+
+			char buff[10];
+			snprintf(buff, sizeof(buff), "%d", ass_keep);
+			pref_slider_v = XPCreateWidget(left + width - 25, top, left + width - 2*5 , top - 25,
+										   1, buff, 0, pref_widget, xpWidgetClass_Caption);
+
+			XPSetWidgetProperty(pref_slider, xpProperty_ScrollBarMin, KEEP_MIN);
+			XPSetWidgetProperty(pref_slider, xpProperty_ScrollBarMax, KEEP_MAX);
+			XPSetWidgetProperty(pref_slider, xpProperty_ScrollBarPageAmount, 1);
+			XPSetWidgetProperty(pref_slider, xpProperty_ScrollBarSliderPosition, ass_keep);
+
+			top -= 30;
+			pref_btn = XPCreateWidget(left, top, left + width - 2*5, top - 20,
+				1, "OK", 0, pref_widget, xpWidgetClass_Button);
+			XPAddWidgetCallback(pref_btn, widget_cb);
 		}
-		
-		XPShowWidget(conf_widget);
+
+		XPShowWidget(pref_widget);
 	}
 }
 
@@ -195,8 +245,8 @@ XPluginStart(char *out_name, char *out_sig, char *out_desc)
     XPLMRegisterFlightLoopCallback(game_loop_cb, 30.0f, NULL);
 
     menu = XPLMFindPluginsMenu();
-    sub_menu = XPLMAppendMenuItem(menu, "Autosave Save", NULL, 1);
-    ass_menu = XPLMCreateMenu("Autosave Save", menu, sub_menu, menu_cb, NULL);
+    sub_menu = XPLMAppendMenuItem(menu, "Autosave Saver", NULL, 1);
+    ass_menu = XPLMCreateMenu("Autosave Saver", menu, sub_menu, menu_cb, NULL);
 	ass_enable_item = XPLMAppendMenuItem(ass_menu, "Enabled", &ass_enabled, 0);
 	XPLMCheckMenuItem(ass_menu, ass_enable_item,
 					  ass_enabled ? xplm_Menu_Checked : xplm_Menu_Unchecked);
