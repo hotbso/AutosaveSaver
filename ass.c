@@ -232,7 +232,7 @@ XPluginStart(char *out_name, char *out_sig, char *out_desc)
     psep = XPLMGetDirectorySeparator();
 	XPLMGetSystemPath(xpdir);
 
-    strcpy(out_name, "Autosave Saver (ass) " VERSION);
+    strcpy(out_name, "Autosave Saver " VERSION);
     strcpy(out_sig, "hotbso");
     strcpy(out_desc, "A plugin that saves autosave state/situation files with a timestamp.");
 
@@ -240,7 +240,7 @@ XPluginStart(char *out_name, char *out_sig, char *out_desc)
     XPLMGetPrefsPath(pref_path);
     XPLMExtractFileAndPath(pref_path);
     strcat(pref_path, psep);
-    strcat(pref_path, "ass.prf");
+    strcat(pref_path, "AutosaveSaver.prf");
 	load_pref();
 
     XPLMRegisterFlightLoopCallback(game_loop_cb, 30.0f, NULL);
