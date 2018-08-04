@@ -65,9 +65,9 @@ static int ass_enable_item;
 static XPWidgetID pref_widget, pref_slider, pref_slider_v, pref_btn;
 
 static char autosave_file[512];
-static char autosave_base[20];
-static char autosave_ext[10];
-static char cfg_path[512];
+static const char *autosave_base;
+static const char *autosave_ext;
+static char pref_path[512];
 
 
 #define TS_MAX 50
@@ -123,7 +123,7 @@ log_msg(const char *fmt, ...)
 static void
 save_pref()
 {
-    FILE *f = fopen(cfg_path, "w");
+    FILE *f = fopen(pref_path, "w");
     if (NULL == f)
         return;
 
@@ -135,7 +135,7 @@ save_pref()
 static void
 load_pref()
 {
-    FILE *f  = fopen(cfg_path, "r");
+    FILE *f  = fopen(pref_path, "r");
     if (NULL == f)
         return;
 
@@ -186,6 +186,8 @@ menu_cb(void *menu_ref, void *item_ref)
 		XPLMCheckMenuItem(ass_menu, ass_enable_item,
 						  ass_enabled ? xplm_Menu_Checked : xplm_Menu_Unchecked);
 	} else if ((int *)item_ref == &ass_keep) {
+
+		/* create gui */
 		if (NULL == pref_widget) {
 			int left = 200;
 			int top = 600;
@@ -215,13 +217,14 @@ menu_cb(void *menu_ref, void *item_ref)
 
 			top -= 30;
 			pref_btn = XPCreateWidget(left, top, left + width - 2*5, top - 20,
-				1, "OK", 0, pref_widget, xpWidgetClass_Button);
+									  1, "OK", 0, pref_widget, xpWidgetClass_Button);
 			XPAddWidgetCallback(pref_btn, widget_cb);
 		}
 
 		XPShowWidget(pref_widget);
 	}
 }
+
 
 PLUGIN_API int
 XPluginStart(char *out_name, char *out_sig, char *out_desc)
@@ -235,14 +238,15 @@ XPluginStart(char *out_name, char *out_sig, char *out_desc)
     psep = XPLMGetDirectorySeparator();
 	XPLMGetSystemPath(xpdir);
 
-    strcpy(out_name, "autosave saver (ass) " VERSION);
+    strcpy(out_name, "Autosave Saver (ass) " VERSION);
     strcpy(out_sig, "hotbso");
-    strcpy(out_desc, "A plugin that save autosave state/situation files with a timestamp.");
+    strcpy(out_desc, "A plugin that saves autosave state/situation files with a timestamp.");
 
-    XPLMGetPrefsPath(cfg_path);
-    XPLMExtractFileAndPath(cfg_path);
-    strcat(cfg_path, psep);
-    strcat(cfg_path, "ass.prf");
+	/* load preferences */
+    XPLMGetPrefsPath(pref_path);
+    XPLMExtractFileAndPath(pref_path);
+    strcat(pref_path, psep);
+    strcat(pref_path, "ass.prf");
 	load_pref();
 
     XPLMRegisterFlightLoopCallback(game_loop_cb, 30.0f, NULL);
@@ -256,7 +260,6 @@ XPluginStart(char *out_name, char *out_sig, char *out_desc)
 	XPLMAppendMenuItem(ass_menu, "Configure", &ass_keep, 0);
     return 1;
 }
-
 
 
 PLUGIN_API void
@@ -292,10 +295,10 @@ XPluginReceiveMessage(XPLMPluginID in_from, long in_msg, void *in_param)
 
 				/* assume not detected */
 				autosave_file[0] = '\0';
+				n_ts_list = 0;
 
 				XPLMGetNthAircraftModel(XPLM_USER_AIRCRAFT, acf_file, acf_path);
 				log_msg(acf_file);
-				log_msg(acf_path);
 
 				if (0 == strcmp(acf_file, "A320.acf")) {
 					strcpy(autosave_file, acf_path);
@@ -305,16 +308,35 @@ XPluginReceiveMessage(XPLMPluginID in_from, long in_msg, void *in_param)
 					sprintf(s+1, "data%sstate", psep);
 					if (0 != access(autosave_file, F_OK))
 						return;
-					
+
 					log_msg("Detected FFA320U");
-					
+
 					strcat(s, psep);
-					strcat(s, "sautosave.asb");
-					strcpy(autosave_base, "autosave");
-					strcpy(autosave_ext, ".asb");
+					strcat(s, "autosave.asb");
+					autosave_base = "autosave";
+					autosave_ext = ".asb";
+					log_msg(autosave_file);
+					init_ts_list();
+
+				} else if (0 == strncmp(acf_file, "a319", 4)) {
+					XPLMGetSystemPath(autosave_file);
+					char *s = autosave_file + strlen(autosave_file);
+
+					/* check for directory */
+					sprintf(s, "Resources%splugins%sToLissData%sSituations", psep, psep, psep);
+					if (0 != access(autosave_file, F_OK))
+						return;
+
+					log_msg("Detected ToLiss A319");
+
+					strcat(s, psep);
+					strcat(s, "A319_AUTOSAVED_SITUATION.qps");
+					autosave_base = "A319_AUTOSAVED_SITUATION";
+					autosave_ext = ".qps";
 					log_msg(autosave_file);
 					init_ts_list();
 				}
+
 			}
 		break;
 	}
@@ -324,7 +346,7 @@ XPluginReceiveMessage(XPLMPluginID in_from, long in_msg, void *in_param)
 static void
 delete_tail(void) {
 	char fname[512];
-	
+
 	if (!ass_enabled)
 		return;
 
@@ -345,6 +367,8 @@ delete_tail(void) {
 	}
 }
 
+
+/* malloc or realloc ts_list */
 static int
 alloc_ts_list(void) {
 	if (n_ts_list < max_ts_list - 1)
@@ -363,13 +387,14 @@ alloc_ts_list(void) {
 	return 1;
 }
 
+
+/* build sorted list of timestamps from existing saved files */
 static void
 init_ts_list(void)
 {
 	if (ass_error_disabled)
 		return;
 
-	n_ts_list = 0;
 	if (! alloc_ts_list())
 		return;
 
@@ -389,7 +414,6 @@ init_ts_list(void)
 	strcpy(ass_mask, autosave_base);
 	strcat(ass_mask, "_??????_????");
 	strcat(ass_mask, autosave_ext);
-	log_msg("mask: '%s'", ass_mask);
 
 	const struct dirent *de;
 	while (NULL != (de = readdir(dir)))	{
@@ -413,9 +437,8 @@ init_ts_list(void)
 
 	ts_head = n_ts_list - 1;
 	ts_tail = 0;
-
-	delete_tail();
 }
+
 
 static float
 game_loop_cb(float elapsed_last_call,
@@ -431,20 +454,20 @@ game_loop_cb(float elapsed_last_call,
 	if (0 != stat(autosave_file, &stat_buf))
 		goto done;
 
-	/* no idea whether we run in the sam thread as the writer, so
+	/* no idea whether we run in the same thread as the writer, so
 	   hopefully it is finished after 30 s */
-
 	if (now - stat_buf.st_mtime > 30) {
 		char new_name[1024];
 		char ts[TS_LENGTH];
 
-		struct tm *tm = localtime(&now);
+		struct tm *tm = localtime(&stat_buf.st_mtime);
 
 		strcpy(new_name, autosave_file);
 		char *s = strrchr(new_name, psep[0]);
 		snprintf(ts, TS_LENGTH, "%02d%02d%02d_%02d%02d", tm->tm_year-100, tm->tm_mon+1,
 				 tm->tm_mday, tm->tm_hour, tm->tm_min);
 		sprintf(s+1, "%s_%s%s", autosave_base, ts, autosave_ext);
+
 		if (rename(autosave_file, new_name) < 0) {
 			log_msg("Cannot rename autosave file to '%s': %s", new_name, strerror(errno));
 			ass_error_disabled = 1;
@@ -456,10 +479,11 @@ game_loop_cb(float elapsed_last_call,
 		if (!alloc_ts_list())
 			goto done;
 
+		ts_head = (ts_head + 1) % max_ts_list;
 		char *d = ts_list + (TS_LENGTH * ts_head);
 		memcpy(d, ts, TS_LENGTH);
 		n_ts_list++;
-		ts_head = (ts_head + 1) % max_ts_list;
+		log_msg("After insert of TS ts_head: %d, ts_tail: %d, n_ts_list: %d", ts_head, ts_tail, n_ts_list);
 
 		delete_tail();
 	}
