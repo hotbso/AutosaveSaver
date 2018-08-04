@@ -30,6 +30,8 @@ SOFTWARE.
 #include <time.h>
 #include <stdarg.h>
 #include <dirent.h>
+#include <errno.h>
+#include <unistd.h>
 #include <sys/stat.h>
 
 #include "XPLMPlugin.h"
@@ -40,16 +42,9 @@ SOFTWARE.
 #include "XPWidgets.h"
 #include "XPStandardWidgets.h"
 
-#if 0
-#include "XPLMDisplay.h"
-#include "XPLMGraphics.h"
-#include "XPLMDataAccess.h"
-#include "XPLMNavigation.h"
-#endif
-
 #define UNUSED(x) (void)(x)
 
-#define VERSION "0.7a"
+#define VERSION "1.0b1"
 
 static float game_loop_cb(float elapsed_last_call,
                 float elapsed_last_loop, int counter,
@@ -70,7 +65,6 @@ static const char *autosave_ext;
 static char pref_path[512];
 
 
-#define TS_MAX 50
 #define TS_LENGTH 12 /* YYMMDD_HHMM\0 */
 #define KEEP_MIN 2
 #define KEEP_MAX 20
