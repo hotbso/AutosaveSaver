@@ -1,4 +1,4 @@
-PLUGINS=../X-Plane/Resources/plugins/ass
+PLUGINS=../X-Plane/Resources/plugins/AutosaveSaver
 SDK=../SDK
 
 TARGET=lin.xpl
