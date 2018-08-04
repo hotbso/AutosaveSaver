@@ -1,0 +1,26 @@
+PLUGINS=../X-Plane/Resources/plugins/ass
+SDK=../SDK
+
+TARGET=lin.xpl
+HEADERS=$(wildcard *.h)
+SOURCES=$(wildcard *.c)
+OBJECTS=$(SOURCES:.c=.o)
+
+CFLAGS=-Wall -O2 -I$(SDK)/CHeaders/XPLM -I$(SDK)/CHeaders/Widgets -DLIN=1 -DXPLM200 -fPIC -fno-stack-protector
+LNFLAGS=-shared -rdynamic -nodefaultlibs -undefined_warning
+LIBS=
+
+all: $(TARGET)
+
+.c.o:
+	$(CC) $(CFLAGS) -c $<
+	
+$(TARGET): $(OBJECTS)
+	$(CC) -o $(TARGET) $(LNFLAGS) $(OBJECTS) $(LIBS)
+
+clean:
+	rm -f $(OBJECTS) $(TARGET)
+
+install: $(TARGET)
+	cp -p $(TARGET) $(PLUGINS)/64
+        
