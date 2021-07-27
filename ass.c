@@ -60,8 +60,8 @@ static int ass_enable_item;
 static XPWidgetID pref_widget, pref_slider, pref_slider_v, pref_btn;
 
 static char autosave_file[512];
-static const char *autosave_base;
-static const char *autosave_ext;
+static char autosave_base[100];
+static const char *autosave_ext, *autosave_ext1;
 static char pref_path[512];
 
 
@@ -294,7 +294,10 @@ XPluginReceiveMessage(XPLMPluginID in_from, long in_msg, void *in_param)
                 XPLMGetNthAircraftModel(XPLM_USER_AIRCRAFT, acf_file, acf_path);
                 log_msg(acf_file);
 
-                if (0 == strcmp(acf_file, "A320.acf")) {
+                acf_file[4] = '\0';
+                strupr(acf_file);
+                
+                if (0 == strcmp(acf_file, "A320")) {
                     strcpy(autosave_file, acf_path);
                     char *s = strrchr(autosave_file, psep[0]);
 
@@ -307,12 +310,13 @@ XPluginReceiveMessage(XPLMPluginID in_from, long in_msg, void *in_param)
 
                     strcat(s, psep);
                     strcat(s, "autosave.asb");
-                    autosave_base = "autosave";
+                    strcpy(autosave_base, "autosave");
                     autosave_ext = ".asb";
+                    autosave_ext1 = NULL;
                     log_msg(autosave_file);
                     init_ts_list();
 
-                } else if (0 == strncmp(acf_file, "a319", 4)) {
+                } else if (0 == strcmp(acf_file, "A319") || 0 == strcmp(acf_file, "A321")) {
                     XPLMGetSystemPath(autosave_file);
                     char *s = autosave_file + strlen(autosave_file);
 
@@ -321,12 +325,13 @@ XPluginReceiveMessage(XPLMPluginID in_from, long in_msg, void *in_param)
                     if (0 != access(autosave_file, F_OK))
                         return;
 
-                    log_msg("Detected ToLiss A319");
+                    log_msg("Detected ToLiss A319/A321");
 
                     strcat(s, psep);
-                    strcat(s, "A319_AUTOSAVED_SITUATION.qps");
-                    autosave_base = "A319_AUTOSAVED_SITUATION";
+                    strcat(s, acf_file); strcat(s, "_AUTOSAVED_SITUATION.qps");
+                    strcpy(autosave_base, acf_file); strcat(autosave_base, "_AUTOSAVED_SITUATION");
                     autosave_ext = ".qps";
+                    autosave_ext1 = "_pilotItems.dat";
                     log_msg(autosave_file);
                     init_ts_list();
                 }
@@ -353,6 +358,11 @@ delete_tail(void) {
             log_msg("Can't unlink '%s': %s", fname, strerror(errno));
             ass_error_disabled = 1;
             return;
+        }
+
+        if (autosave_ext1) {
+            sprintf(s+1, "%s_%s%s", autosave_base, ts_list + ts_tail * TS_LENGTH, autosave_ext1);
+            unlink(fname);  /* no errors */
         }
 
         log_msg("Deleted: '%s'", fname);
@@ -466,6 +476,17 @@ game_loop_cb(float elapsed_last_call,
             log_msg("Cannot rename autosave file to '%s': %s", new_name, strerror(errno));
             ass_error_disabled = 1;
             goto done;
+        }
+
+        if (autosave_ext1) {
+            char asf1[1024];
+            strcpy(asf1, autosave_file);
+            int len = strlen(asf1);
+            if (len > 4) {
+                strcpy(asf1 + len - 4, autosave_ext1);
+                sprintf(s+1, "%s_%s%s", autosave_base, ts, autosave_ext1);
+                rename(asf1, new_name); /* no errors */
+            }
         }
 
         log_msg("Renamed autosave file to '%s'", new_name);
