@@ -44,7 +44,7 @@ SOFTWARE.
 
 #define UNUSED(x) (void)(x)
 
-#define VERSION "1.00"
+#define VERSION "1.10"
 
 static float game_loop_cb(float elapsed_last_call,
                 float elapsed_last_loop, int counter,
@@ -61,7 +61,7 @@ static XPWidgetID pref_widget, pref_slider, pref_slider_v, pref_btn;
 
 static char autosave_file[512];
 static char autosave_base[100];
-static const char *autosave_ext, *autosave_ext1;
+static const char *autosave_ext, *autosave_ext1; /* _ext1 is for dealing with ToLiss' _pilotitems.dat files */
 static char pref_path[512];
 
 
