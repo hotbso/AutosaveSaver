@@ -294,8 +294,10 @@ XPluginReceiveMessage(XPLMPluginID in_from, long in_msg, void *in_param)
                 XPLMGetNthAircraftModel(XPLM_USER_AIRCRAFT, acf_file, acf_path);
                 log_msg(acf_file);
 
+                /* uppercase Axxx */
                 acf_file[4] = '\0';
-                strupr(acf_file);
+                for (int i = 0; i < 4; i++)
+                    acf_file[i] = toupper(acf_file[i]);
                 
                 if (0 == strcmp(acf_file, "A320")) {
                     strcpy(autosave_file, acf_path);
