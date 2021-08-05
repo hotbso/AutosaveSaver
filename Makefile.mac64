@@ -5,8 +5,8 @@ HEADERS=$(wildcard *.h)
 SOURCES=$(wildcard *.c)
 OBJECTS=$(SOURCES:.c=.o)
 
-OSXC=-arch x86_64 -mmacosx-version-min=10.7 
-OSXL=-arch x86_64 -mmacosx-version-min=10.7
+OSXC=-arch x86_64 -mmacosx-version-min=10.10
+OSXL=-arch x86_64 -mmacosx-version-min=10.10
 
 DEFS= -DAPL=1 -DXPLM200 -fPIC -fno-stack-protector -fvisibility=hidden -ffast-math -DNDEBUG
 
