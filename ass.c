@@ -294,12 +294,7 @@ XPluginReceiveMessage(XPLMPluginID in_from, long in_msg, void *in_param)
                 XPLMGetNthAircraftModel(XPLM_USER_AIRCRAFT, acf_file, acf_path);
                 log_msg(acf_file);
 
-                /* uppercase Axxx */
-                acf_file[4] = '\0';
-                for (int i = 0; i < 4; i++)
-                    acf_file[i] = toupper(acf_file[i]);
-                
-                if (0 == strcmp(acf_file, "A320")) {
+                if (0 == strcmp(acf_file, "A320.acf")) {        /* FF A320 */
                     strcpy(autosave_file, acf_path);
                     char *s = strrchr(autosave_file, psep[0]);
 
@@ -312,30 +307,42 @@ XPluginReceiveMessage(XPLMPluginID in_from, long in_msg, void *in_param)
 
                     strcat(s, psep);
                     strcat(s, "autosave.asb");
+
                     strcpy(autosave_base, "autosave");
                     autosave_ext = ".asb";
                     autosave_ext1 = NULL;
                     log_msg(autosave_file);
                     init_ts_list();
 
-                } else if (0 == strcmp(acf_file, "A319") || 0 == strcmp(acf_file, "A321")) {
-                    XPLMGetSystemPath(autosave_file);
-                    char *s = autosave_file + strlen(autosave_file);
+                } else {    /* ToLiss fleet */
+                    const char *prefix = NULL;
+                    if (0 == strcmp(acf_file, "a319.acf"))
+                        prefix = "A319";
+                    else if (0 == strcmp(acf_file, "a321.acf"))
+                        prefix = "A321";
+                    else if (0 == strcmp(acf_file, "A340-600.acf"))
+                        prefix = "A346";
 
-                    /* check for directory */
-                    sprintf(s, "Resources%splugins%sToLissData%sSituations", psep, psep, psep);
-                    if (0 != access(autosave_file, F_OK))
-                        return;
+                    if (prefix) {
+                        XPLMGetSystemPath(autosave_file);
+                        char *s = autosave_file + strlen(autosave_file);
 
-                    log_msg("Detected ToLiss A319/A321");
+                        /* check for directory */
+                        sprintf(s, "Resources%splugins%sToLissData%sSituations", psep, psep, psep);
+                        if (0 != access(autosave_file, F_OK))
+                            return;
 
-                    strcat(s, psep);
-                    strcat(s, acf_file); strcat(s, "_AUTOSAVED_SITUATION.qps");
-                    strcpy(autosave_base, acf_file); strcat(autosave_base, "_AUTOSAVED_SITUATION");
-                    autosave_ext = ".qps";
-                    autosave_ext1 = "_pilotItems.dat";
-                    log_msg(autosave_file);
-                    init_ts_list();
+                        log_msg("Detected ToLiss A319/A321/A340");
+
+                        strcat(s, psep);
+                        strcat(s, prefix); strcat(s, "_AUTOSAVED_SITUATION.qps");
+
+                        strcpy(autosave_base, prefix); strcat(autosave_base, "_AUTOSAVED_SITUATION");
+                        autosave_ext = ".qps";
+                        autosave_ext1 = "_pilotItems.dat";
+                        log_msg(autosave_file);
+                        init_ts_list();
+                    }
                 }
 
             }
