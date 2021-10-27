@@ -44,7 +44,7 @@ SOFTWARE.
 
 #define UNUSED(x) (void)(x)
 
-#define VERSION "1.10"
+#define VERSION "1.20"
 
 static float game_loop_cb(float elapsed_last_call,
                 float elapsed_last_loop, int counter,
