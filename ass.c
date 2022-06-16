@@ -44,7 +44,7 @@ SOFTWARE.
 
 #define UNUSED(x) (void)(x)
 
-#define VERSION "1.20"
+#define VERSION "1.30"
 
 static float game_loop_cb(float elapsed_last_call,
                 float elapsed_last_loop, int counter,
@@ -316,11 +316,11 @@ XPluginReceiveMessage(XPLMPluginID in_from, long in_msg, void *in_param)
 
                 } else {    /* ToLiss fleet */
                     const char *prefix = NULL;
-                    if (0 == strcmp(acf_file, "a319.acf"))
+                    if (acf_file == strstr(acf_file, "a319"))
                         prefix = "A319";
-                    else if (0 == strcmp(acf_file, "a321.acf"))
+                    else if (acf_file == strstr(acf_file, "a321"))
                         prefix = "A321";
-                    else if (0 == strcmp(acf_file, "A340-600.acf"))
+                    else if (acf_file == strstr(acf_file, "A340-600"))
                         prefix = "A346";
 
                     if (prefix) {
