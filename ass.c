@@ -44,7 +44,7 @@ SOFTWARE.
 
 #define UNUSED(x) (void)(x)
 
-#define VERSION "1.30"
+#define VERSION "1.31"
 
 static float game_loop_cb(float elapsed_last_call,
                 float elapsed_last_loop, int counter,
@@ -320,6 +320,8 @@ XPluginReceiveMessage(XPLMPluginID in_from, long in_msg, void *in_param)
                         prefix = "A319";
                     else if (acf_file == strstr(acf_file, "a321"))
                         prefix = "A321";
+                    else if (acf_file == strstr(acf_file, "a320"))
+                        prefix = "A320";
                     else if (acf_file == strstr(acf_file, "A340-600"))
                         prefix = "A346";
 
@@ -332,7 +334,7 @@ XPluginReceiveMessage(XPLMPluginID in_from, long in_msg, void *in_param)
                         if (0 != access(autosave_file, F_OK))
                             return;
 
-                        log_msg("Detected ToLiss A319/A321/A340");
+                        log_msg("Detected ToLiss A319/A320/A321/A340");
 
                         strcat(s, psep);
                         strcat(s, prefix); strcat(s, "_AUTOSAVED_SITUATION.qps");
